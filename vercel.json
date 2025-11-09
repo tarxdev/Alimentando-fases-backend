@@ -9,7 +9,7 @@
   "routes": [
     {
       "src": "/api/chat",
-      "dest": "api/chat.py"
+      "dest": "/api/chat.py"
     }
   ]
 }
