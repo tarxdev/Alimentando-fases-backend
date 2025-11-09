@@ -4,12 +4,9 @@ from flask import Flask, request, jsonify
 import google.generativeai as genai
 from google.generativeai.errors import APIError
 
-# =======================================================
-# --- CONFIGURAÇÃO DE SEGURANÇA E IA --
-# =======================================================
 
-# Carrega a chave da Vercel Environment Variables
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+# 1. CARREGAMENTO DE TESTE DA API KEY (HARDCODING TEMPORÁRIO)
+GOOGLE_API_KEY = "AIzaSyBe3VpAbYtJltk_Qd-vibUuWS750odg3o8" 
 
 # Define o "Personagem" do Chatbot (Sistema de Instrução)
 SYSTEM_INSTRUCTION = (
@@ -23,13 +20,20 @@ SYSTEM_INSTRUCTION = (
     "Exemplo de resposta de navegação: "
     "~{\"action\": \"navigate\", \"path\": \"#receitas\"}"
     "As páginas válidas são: '#receitas', '#fases-da-vida', '#guia-alimentar', '#contato', '#quem-somos'. "
-    "Se a intenção não for navegar, apenas responda à pergunta sobre nutrição."
+    "Para qualquer outra pergunta, forneça uma resposta de nutrição. Se a página pedida não for válida, diga que não pode navegar até lá."
 )
 
+# Configuração de CORS (necessária para comunicação entre GitHub Pages e Vercel)
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+}
 
 # Configura a API Key do Google AI e inicializa o modelo
 MODEL = None
-if GOOGLE_API_KEY:
+# A condição abaixo verifica se a chave foi substituída
+if GOOGLE_API_KEY and GOOGLE_API_KEY != "SUA_CHAVE_SECRETA_COMPLETA_AQUI":
     try:
         genai.configure(api_key=GOOGLE_API_KEY)
         MODEL = genai.GenerativeModel(
@@ -40,46 +44,27 @@ if GOOGLE_API_KEY:
         print(f"AVISO: Erro ao configurar a API Gemini: {e}")
         MODEL = None
 else:
-    print("AVISO: Variável de ambiente GOOGLE_API_KEY não definida.")
+    # Se você esqueceu de substituir a string, esta mensagem aparece nos logs do Vercel
+    print("ERRO CRÍTICO: Chave de API ausente ou não substituída no código.")
 
-# =======================================================
-# INSTÂNCIA PRINCIPAL DO FLASK (WSGI - PONTO DE ENTRADA)
-# =======================================================
 
-# 1. Cria a instância do Flask. O Vercel procurará por uma variável 'app'.
+# 2. PONTO DE ENTRADA DO VERCEL/FLASK
+# Cria a instância Flask
 app = Flask(__name__)
 
-# 2. Rota que o Vercel irá servir: /api/chat (o nome do arquivo 'chat.py' + a rota)
-@app.route('/api/chat', methods=['POST', 'OPTIONS'])
-def chat_entry_point():
-    """
-    Função de ponto de entrada chamada pelo Vercel. 
-    Ela chama a lógica principal e garante que a variável 'request' seja o objeto Flask Request.
-    """
-
-    # --- Configuração de CORS (para o GitHub Pages) ---
-    CORS_HEADERS = {
-        'Access-Control-Allow-Origin': '*', # Permitir todas as origens para funcionar com GitHub Pages
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Max-Age': '3600'
-    }
-
-    # Resposta ao Preflight (Requisição OPTIONS)
-    if request.method == 'OPTIONS':
+# Manipulador da requisição principal (a lógica da API)
+def handler(flask_request):
+    # Trata a requisição OPTIONS (Pré-voo CORS)
+    if flask_request.method == 'OPTIONS':
         return ('', 204, CORS_HEADERS)
-
-    # Checagem de Configuração
-    if not GOOGLE_API_KEY or not MODEL:
-        return (jsonify({"error": "Erro de Configuração: API Key ou Modelo não está definido."}), 
+    
+    # 1. Checagem de Inicialização
+    if not MODEL:
+        return (jsonify({"error": "Erro de Configuração: O modelo Gemini não pôde ser inicializado. Verifique a chave API."}), 
                 500, CORS_HEADERS)
-        
+    
     try:
-        # Pega o JSON do objeto 'request' do Flask
-        data = request.get_json(silent=True)
-        if data is None:
-             return (jsonify({"error": "Requisição inválida: O corpo da requisição não é um JSON válido."}), 400, CORS_HEADERS)
-
+        data = flask_request.get_json(silent=True)
         history = data.get("history")
         
         if not history:
@@ -119,5 +104,14 @@ def chat_entry_point():
         return (jsonify({"error": f"Erro interno ao processar a resposta: {str(e)}"}), 
                 500, CORS_HEADERS)
 
-# A Vercel procurará pela variável 'app' para rodar a função WSGI
-# Não é necessário o bloco 'if __name__ == "__main__":'
+# Define a função principal que o Vercel irá procurar (necessário para o Serverless)
+# A rota Flask é definida para o Vercel.
+@app.route('/api/chat', methods=['POST', 'OPTIONS'])
+def chat():
+    # O objeto 'request' é injetado pelo Flask
+    return handler(request)
+
+# Esta função é o ponto de entrada serverless para o Vercel (se necessário pelo vercel.json).
+def chat_entry_point(request):
+    # Chama a função 'chat' decorada acima
+    return chat()
