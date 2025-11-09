@@ -6,7 +6,7 @@ from google.generativeai.errors import APIError
 
 
 # 1. CARREGAMENTO DE TESTE DA API KEY (HARDCODING TEMPORÁRIO)
-GOOGLE_API_KEY = "AIzaSyBe3VpAbYtJltk_Qd-vibUuWS750odg3o8" 
+GOOGLE_API_KEY = "" 
 
 # Define o "Personagem" do Chatbot (Sistema de Instrução)
 SYSTEM_INSTRUCTION = (
